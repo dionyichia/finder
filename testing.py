@@ -110,7 +110,8 @@ if __name__ == "__main__":
     questions_file = "questions.txt"
     
     # Compile workflow (assuming this is already done)
-    workflow = main.create_graph()
+    vectorstore = main.index_and_embed()
+    workflow = main.create_graph(vectorstore)
     app = workflow.compile()
     
     # Run the test
@@ -124,3 +125,5 @@ if __name__ == "__main__":
         print(f"Question: {q['question']}")
         print(f"Generated Answer: {q['generated_answer']}")
         print(f"Ground Truth: {q['ground_truth']}\n")
+
+    print("Prog Finished")

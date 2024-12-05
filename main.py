@@ -1,4 +1,5 @@
 import keys
+import utils
 import bs4
 # from langchain import hub
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -6,15 +7,18 @@ from langchain_community.embeddings import GPT4AllEmbeddings
 from langchain_community.document_loaders import WebBaseLoader
 # from langchain_community.vectorstores import Chroma
 from langchain_milvus import Milvus
+from langchain_core.runnables import chain
 from langchain_community.vectorstores.utils import filter_complex_metadata
+from langchain.docstore.document import Document
 from langchain_core.output_parsers import StrOutputParser
 # from langchain_core.runnables import RunnablePassthrough
-from langchain.docstore.document import Document
+from typing import List, Union
 import nest_asyncio
 from llama_parse import LlamaParse
 from llama_index.core import SimpleDirectoryReader
 from llama_index.core.node_parser import MarkdownNodeParser
 import embed
+from pymilvus import Collection
 
 # Instiating a model
 from langchain.prompts import PromptTemplate
@@ -27,22 +31,55 @@ llm = ChatOllama(model=local_llm, format="json", temperature=0)
 
 # THIS WHOLE PORTION IS FOR INDEXING
 
-parser = LlamaParse(
-    result_type="markdown",  # "markdown" and "text" are available
-    verbose=True,
-    num_workers=4,
-    split_by_page = 0,
-)
-
 def index_documents():
-    file_extractor = {".pdf": parser}
-    pdf_docs = SimpleDirectoryReader(
-        "./data", file_extractor=file_extractor
-    ).load_data()
 
+    # Define the file path
+    parsed_file_path = "./parsed_data/LlamaParsed_pdf_docs.txt"
+    
+    # Initialize the parser
+    parser = LlamaParse(
+        result_type="markdown",  # "markdown" and "text" are available
+        verbose=True,
+        num_workers=4,
+        split_by_page=0,
+    )
+
+    file_extractor = {".pdf": parser}
+
+    try:
+        with open(parsed_file_path, "r") as f:
+            content = f.read().strip()
+
+        if content:
+            # If file has content, load from the file
+            # Deserialize the JSON to reconstruct Document
+            doc_dict = utils.json.loads(content)
+            pdf_docs = [utils.dict_to_document(doc_dict)]
+    
+        else:
+            # If file is empty, parse PDFs
+            pdf_docs = SimpleDirectoryReader("./data", file_extractor=file_extractor).load_data()
+            
+            # Save the first document's full details to the file
+            with open(parsed_file_path, "w") as f:
+                f.seek(0)
+                # TO CHANGE THIS TO SUPPORT MULTI PDFS, NEED TO CHANGE THE WAY THE IT IS LOADED ADN RETRIEVED FROM THE .TXT FILE, CURRENTLY ONLY 1 DOC THERFORE PDF_DOCS[0] WORKS, WILL NOT WORK FOR MUTLI DOC
+                utils.json.dump(utils.document_to_dict(pdf_docs[0]), f, indent=2)
+                f.truncate()
+
+    except FileNotFoundError:
+        # If file doesn't exist, parse PDFs
+        pdf_docs = SimpleDirectoryReader("./data", file_extractor=file_extractor).load_data()
+        
+        # Create the file and save the first document's full details
+        with open(parsed_file_path, "w") as f:
+            f.seek(0)
+            utils.json.dump(utils.document_to_dict(pdf_docs[0]), f, indent=2)
+            f.truncate()
 
     node_parser = MarkdownNodeParser(llm=None)
     nodes = node_parser.get_nodes_from_documents(documents=pdf_docs)
+
     return nodes
 
 # # Print debug information
@@ -86,33 +123,71 @@ def index_documents():
 # split_docs = text_splitter.split_documents(langchain_docs)
 
 # THIS PORTION IS ON INITIALISING AND POPULATNG THE VECTOR DB
-# Embedding parsed documents into Vector DB 
-# embeddings = GPT4AllEmbeddings.embed_documents(nodes)
-
 
 def setup_vector_store():
     # Initialise Milvus DB
-    URI = "./vector_db.db"
+    connection_args={"host": "127.0.0.1", "port": "19530"}
+    embeddings = GPT4AllEmbeddings()
 
-    index_params = {
-        'metric_type': 'COSINE',
-        'index_type': "IVF_FLAT",
-        'params': {"nlist": 128}
-    }
-
-    search_params = {
-        "metric_type": "COSINE",
-        "params": {"nprobe": 12},  # Number of clusters to probe
-    }
-
-    vector_store = Milvus (
-        connection_args={"host": "127.0.0.1", "port": "19530"},
-        embedding_function=GPT4AllEmbeddings(), # Might what to switch to node embedding instead of text
-        index_params=index_params,
-        search_params=search_params,
+    # Initialise Milvus 
+    vector_store = Milvus(
+        connection_args=connection_args,
+        embedding_function=embeddings, # Might what to switch to node embedding instead of text
+        drop_old=True
     )
 
     return vector_store
+
+def setup_collections(vectorstore, documents, ids):
+
+    collection_name = "rag_milvus"
+
+    embeddings=GPT4AllEmbeddings()
+    connection_args={"host": "127.0.0.1", "port": "19530"}
+
+    index_params = {
+            'metric_type': 'COSINE',
+            'index_type': "IVF_FLAT",
+            'params': {"nlist": 128}
+        }
+
+    search_params = {
+            "metric_type": "COSINE",
+            "params": {"nprobe": 12},  # Number of clusters to probe
+        }
+
+    # This is to drop the old collection, and create a new collection. If set to false, creating set_up col will add to current col is col_name used is the same.
+    drop_old = True
+
+    vectorstore.collection_name = "rag_milvus"
+    vectorstore.from_documents(documents=documents, embedding=embeddings, collection_name=collection_name, index_params=index_params,search_params=search_params, ids=ids, connection_args=connection_args, drop_old=drop_old)
+
+def load_collection(col_name):
+    return Milvus(collection_name=col_name, embedding_function=GPT4AllEmbeddings())
+
+@chain
+def retriever(query: str) -> list[Document]:
+
+    query = str(query["query"])
+
+    # Load the vector with the collection used for retrieval
+    vectorstore = load_collection("rag_milvus")
+
+    # # Debugging to print the current laoded collection
+    # print(vectorstore.client.get_collection_stats("rag_milvus"))
+    # print(vectorstore.collection_name)
+
+    search_params = {
+        "metric_type": "COSINE",
+        "params": {"nprobe": 12},
+    }
+
+    # Custom search parameters for Milvus
+    docs, scores = zip(*vectorstore.similarity_search_with_score(query=query, param=search_params, k=4))
+    for doc, score in zip(docs, scores):
+        doc.metadata["score"] = score
+        # print(f"Similarity Score: {score}")
+    return docs
 
 # Inserting vectors in Vector DB 
 # Prepare ids of each vector
@@ -120,8 +195,7 @@ def setup_vector_store():
 def index_and_embed():
 
     nodes = index_documents()
-    vector_store = setup_vector_store()
-    # node_embeddings = [embed.create_rich_embedding_text(node) for node in nodes]
+    vectorstore = setup_vector_store()
 
     # Convert nodes into rich nodes and into Langchain Documents for storage
     rich_documents = [
@@ -132,28 +206,14 @@ def index_and_embed():
     ]
 
     ids = [str(i) for i in range(len(rich_documents))]
+    print("Number of chunks: "+ str(len(rich_documents)))
 
-    # Insert documents with their embeddings
-    insert_result = vector_store.add_documents(documents=rich_documents, ids=ids, collection_name="rag_milvus")
-    print("Insert Result: ", insert_result)
+    setup_collections(vectorstore=vectorstore, documents=rich_documents, ids=ids)
 
-# Overloading above default retriever function, to add sim scores in metadata and print scores
-from langchain_core.runnables import chain
-@chain
-def retriever(query: str) -> list[Document]:
-    vector_store = setup_vector_store()
+    # print("Finish Indexing")
 
-    search_params = {
-        "metric_type": "COSINE",
-        "params": {"nprobe": 12},
-    }
+    return vectorstore
 
-    # Custom search parameters for Milvus
-    docs, scores = zip(*vector_store.similarity_search_with_score(query=query, param=search_params))
-    for doc, score in zip(docs, scores):
-        doc.metadata["score"] = score
-        print(score)
-    return docs
 
 # THIS PORTION IS ON RETRIEVAL
 
@@ -256,6 +316,7 @@ web_search_tool = TavilySearchResults(k=3)
 # this defines the states for the llm workflow
 from typing_extensions import TypedDict
 from typing import List
+from langgraph.errors import GraphRecursionError
 
 class GraphState(TypedDict):
     """
@@ -290,7 +351,7 @@ def retrieve(state):
     question = state["question"]
 
     # Retrieval
-    documents = retriever.invoke(question)
+    documents = retriever.invoke({"query": question})
 
     return {"documents": documents, "question": question}
 
@@ -345,7 +406,11 @@ def generate(state):
     question = state["question"]
     documents = state["documents"]
 
-    generated_ans = rag_chain.invoke({"question": question, "documents": documents})
+    try:
+        generated_ans = rag_chain.invoke({"question": question, "documents": documents}, {"recursion_limit": 4})
+    except GraphRecursionError:
+        print("Recursion Error")
+        return
 
     return {"question": question, "documents": documents, "web_search": web_search, "generation": generated_ans}
 
@@ -443,7 +508,7 @@ def check_hallucination(state):
 # THIS IS FOR GRAPH CREATION 
 from langgraph.graph import END, StateGraph
 
-def create_graph():
+def create_graph(vectorstore):
     """
     Creates the StateGraph and workflow
 
@@ -484,13 +549,17 @@ def create_graph():
 
     return workflow
 
+# from IPython.display import Image, display
+
 if __name__ == "__main__":
 
-    index_and_embed()
+    vectorstore = index_and_embed()
 
     # Compile workflow (assuming this is already done)
-    workflow = create_graph()
+    workflow = create_graph(vectorstore)
     app = workflow.compile()
+
+    # display(Image(app.get_graph().draw_mermaid_png()))
 
     inputs = {"question": "How many hours of robotic experience were gathered for training the RL@Scale system?"}
 

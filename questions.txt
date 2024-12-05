@@ -106,3 +106,7 @@ Q: Describe one of the qualitative challenges illustrated in Figure 8 and how th
 A: In Figure 8a, the system had to sort a compostable spoon placed in a yogurt container. It correctly identified that the container was already in the correct bin and moved only the misplaced spoon, demonstrating semantic understanding of the task.
 Q: How many hours of robotic experience were gathered for training the RL@Scale system?
 A: A total of 9527 hours of robotic experience was gathered over 24 months for training.
+Q: How many degrees of freedom does the robotic manipulator arm have in the experiments?
+A: They used a fleet of mobile manipulators with 7-degrees-of-freedom arms and parallel jaw grippers.
+Q: What was purpose of including Pretrained Object Masks?
+A: Diverse real-world sorting scenarios necessitate a very high degree of generalization due to the variety of objects that the robot is likely to encounter. To further boost generalization, we integrate a pre- trained computer vision model that is further fine-tuned on labeled data for the sorting task
