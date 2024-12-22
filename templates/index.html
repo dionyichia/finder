@@ -1,0 +1,156 @@
+{% extends "layout.html" %}
+
+{% block body %}
+
+    <style>
+        .file-upload-container {
+            border: 2px dashed #ccc;
+            border-radius: 20px;
+            width: 480px;
+            font-family: sans-serif;
+            margin: 100px auto;
+            padding: 20px;
+        }
+        .file-upload-container input {
+            display: none;
+        }
+        .file-upload-btn {
+            width: 100%;
+            margin: 0;
+            color: #fff;
+            background: #1FB264;
+            border: none;
+            padding: 10px;
+            border-radius: 4px;
+            border-bottom: 4px solid #15824B;
+            transition: all .2s ease;
+            outline: none;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+        .file-upload-btn:hover {
+            background: #1AA059;
+            color: #ffffff;
+        }
+        .file-upload-name {
+            display: inline-block;
+            padding: 10px;
+            margin-left: 10px;
+        }
+    </style>
+
+    <h1>RAG</h1>
+
+    <div class="container">
+
+        <!-- File Upload Section -->
+        <div class="file-upload-container">
+            <form method="POST" enctype="multipart/form-data">
+                <input type="file" name="file" id="file" accept=".pdf" />
+                <label for="file" class="file-upload-btn">
+                    Upload PDF
+                </label>
+                <span id="file-chosen" class="file-upload-name">No file chosen</span>
+            </form>
+        </div>
+
+        <!-- Query Section -->
+
+        <!-- Query Section -->        
+        <form action="/query" method="post" id="query-form">
+            <input autocomplete="off" autofocus name="query" id="query-input" placeholder="Enter Query" type="text">
+            <button type="submit">Submit</button>
+        </form>
+        
+        <!-- Display the generated response here -->
+        <div id="response-container">
+            {% if response %}
+                <p>Response: {{ response }}</p>
+            {% endif %}
+        </div>
+        
+        <!-- Display Flashed Messages -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <ul>
+                {% for message in messages %}
+                    <li>{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Response Display -->
+        {% if response %}
+        <!-- Response Display -->
+        <div id="response-container"></div>
+        <div id="upload-status"></div>
+        {% endif %}
+    </div>
+
+    <script>
+        // File Upload Handling
+        const fileInput = document.getElementById('file');
+        const fileChosen = document.getElementById('file-chosen');
+        const uploadStatus = document.getElementById('upload-status');
+
+        fileInput.addEventListener('change', async function(){
+            if(this.files && this.files.length > 0){
+                fileChosen.textContent = this.files[0].name;
+                
+                // Create FormData to send the file
+                const formData = new FormData();
+                formData.append('file', this.files[0]);
+
+                try {
+                    // Send file to upload endpoint
+                    const response = await fetch("/upload", {
+                        method: "POST",
+                        body: formData
+                    });
+
+                    const result = await response.json();
+                    
+                    // Update upload status
+                    uploadStatus.textContent = result.message;
+                    uploadStatus.style.color = result.status === 'success' ? 'green' : 'red';
+                } catch (error) {
+                    uploadStatus.textContent = 'Error uploading file';
+                    uploadStatus.style.color = 'red';
+                    console.error('Upload error:', error);
+                }
+            }
+        });
+
+        // Query Handling
+        document.getElementById("query-form").addEventListener("submit", async function (event) {
+            event.preventDefault(); // Prevent the form from reloading the page
+
+            const queryInput = document.getElementById("query-input").value;
+            const responseContainer = document.getElementById("response-container");
+
+            try {
+                console.log(queryInput)
+                // Send the query to the server using the Fetch API
+                const response = await fetch("/query", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({"question": queryInput })
+                });
+
+                console.log(response)
+
+                // Parse the response JSON and display it in the response container
+                const data = await response.json();
+                console.log(data)
+                responseContainer.innerText = `Response: ${data.response}`;
+            } catch (error) {
+                responseContainer.innerText = 'Error processing query';
+                console.error('Query error:', error);
+            }
+        });
+    </script>
+
+{% endblock %}
