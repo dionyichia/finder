@@ -1,48 +1,7 @@
 {% extends "layout.html" %}
 
 {% block body %}
-
-    <style>
-        .file-upload-container {
-            border: 2px dashed #ccc;
-            border-radius: 20px;
-            width: 480px;
-            font-family: sans-serif;
-            margin: 100px auto;
-            padding: 20px;
-        }
-        .file-upload-container input {
-            display: none;
-        }
-        .file-upload-btn {
-            width: 100%;
-            margin: 0;
-            color: #fff;
-            background: #1FB264;
-            border: none;
-            padding: 10px;
-            border-radius: 4px;
-            border-bottom: 4px solid #15824B;
-            transition: all .2s ease;
-            outline: none;
-            text-transform: uppercase;
-            font-weight: 700;
-        }
-        .file-upload-btn:hover {
-            background: #1AA059;
-            color: #ffffff;
-        }
-        .file-upload-name {
-            display: inline-block;
-            padding: 10px;
-            margin-left: 10px;
-        }
-    </style>
-
-    <h1>RAG</h1>
-
-    <div class="container">
-
+    <div class="chat-container">
         <!-- File Upload Section -->
         <div class="file-upload-container">
             <form method="POST" enctype="multipart/form-data">
@@ -54,41 +13,162 @@
             </form>
         </div>
 
-        <!-- Query Section -->
-
-        <!-- Query Section -->        
-        <form action="/query" method="post" id="query-form">
-            <input autocomplete="off" autofocus name="query" id="query-input" placeholder="Enter Query" type="text">
-            <button type="submit">Submit</button>
-        </form>
-        
-        <!-- Display the generated response here -->
-        <div id="response-container">
-            {% if response %}
-                <p>Response: {{ response }}</p>
-            {% endif %}
+        <!-- Chat Messages Container -->
+        <div class="messages-container" id="messages">
+            <!-- Messages will be dynamically inserted here -->
         </div>
-        
-        <!-- Display Flashed Messages -->
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                <ul>
-                {% for message in messages %}
-                    <li>{{ message }}</li>
-                {% endfor %}
-                </ul>
-            {% endif %}
-        {% endwith %}
 
-        <!-- Response Display -->
-        {% if response %}
-        <!-- Response Display -->
-        <div id="response-container"></div>
-        <div id="upload-status"></div>
-        {% endif %}
+        <!-- Input Form -->
+        <div class="input-container">
+            <form id="message-form">
+                <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off">
+                <button type="submit">Send</button>
+            </form>
+        </div>
     </div>
 
+    <!-- 
+        <h1>RAG</h1>
+
+        <div class="container">
+
+            File Upload Section 
+            <div class="file-upload-container">
+                <form method="POST" enctype="multipart/form-data">
+                    <input type="file" name="file" id="file" accept=".pdf" />
+                    <label for="file" class="file-upload-btn">
+                        Upload PDF
+                    </label>
+                    <span id="file-chosen" class="file-upload-name">No file chosen</span>
+                </form>
+            </div>
+
+             
+            <form action="/query" method="post" id="query-form">
+                <input autocomplete="off" autofocus name="query" id="query-input" placeholder="Enter Query" type="text">
+                <button type="submit">Submit</button>
+            </form>
+            
+            
+            <div id="response-container">
+                {% if response %}
+                    <p>Response: {{ response }}</p>
+                {% endif %}
+            </div>
+            
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <ul>
+                    {% for message in messages %}
+                        <li>{{ message }}</li>
+                    {% endfor %}
+                    </ul>
+                {% endif %}
+            {% endwith %}
+
+
+            {% if response %}
+
+            <div id="response-container"></div>
+            <div id="upload-status"></div>
+            {% endif %}
+        </div> 
+    -->
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script>
+        const socket = io();
+        const messagesContainer = document.getElementById('messages');
+        const messageForm = document.getElementById('message-form');
+        const messageInput = document.getElementById('message-input');
+    
+        // Handle file uploads
+        const fileInput = document.getElementById('file');
+        const fileChosen = document.getElementById('file-chosen');
+    
+        fileInput.addEventListener('change', async function() {
+            if (this.files && this.files.length > 0) {
+                const formData = new FormData();
+                formData.append('file', this.files[0]);
+                fileChosen.textContent = this.files[0].name;
+    
+                try {
+                    const response = await fetch('/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const result = await response.json();
+                    addSystemMessage(result.message);
+                } catch (error) {
+                    addSystemMessage('Error uploading file');
+                }
+            }
+        });
+    
+        // Handle sending messages
+        messageForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const message = messageInput.value.trim();
+            
+            if (message) {
+                // Add user message to chat
+                addUserMessage(message);
+                
+                // Send message to server
+                socket.emit('send_message', { message: message });
+                
+                // Clear input
+                messageInput.value = '';
+            }
+        });
+    
+        // Handle receiving messages
+        socket.on('receive_message', (data) => {
+            addAssistantMessage(data.response);
+        });
+    
+        // Helper functions to add messages
+        function addUserMessage(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message user-message';
+            messageDiv.innerHTML = `
+                <div class="message-content">
+                    <p>${message}</p>
+                </div>
+            `;
+            messagesContainer.appendChild(messageDiv);
+            scrollToBottom();
+        }
+    
+        function addAssistantMessage(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant-message';
+            messageDiv.innerHTML = `
+                <div class="message-content">
+                    <p>${message}</p>
+                </div>
+            `;
+            messagesContainer.appendChild(messageDiv);
+            scrollToBottom();
+        }
+    
+        function addSystemMessage(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message system-message';
+            messageDiv.innerHTML = `
+                <div class="message-content">
+                    <p>${message}</p>
+                </div>
+            `;
+            messagesContainer.appendChild(messageDiv);
+            scrollToBottom();
+        }
+    
+        function scrollToBottom() {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+    </script>
+    <!-- <script>
         // File Upload Handling
         const fileInput = document.getElementById('file');
         const fileChosen = document.getElementById('file-chosen');
@@ -151,6 +231,6 @@
                 console.error('Query error:', error);
             }
         });
-    </script>
+    </script> -->
 
 {% endblock %}

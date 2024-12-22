@@ -12,7 +12,7 @@ from marker.output import text_from_rendered
 
 # PARSING ================================
 
-def intialise_n_parse(parser_name: str, input_directory_path, parsed_file_path):
+def intialise_n_parse(parser_name: str, input_file_path, parsed_file_path):
 
     if parser_name.lower() == "llamaparse":
 
@@ -38,16 +38,9 @@ def intialise_n_parse(parser_name: str, input_directory_path, parsed_file_path):
             artifact_dict=create_model_dict(),
         )
 
-        # Iterate through all files in the directory
-        for filename in os.listdir(input_directory_path):
-            # Check if the file is a PDF
-            if filename.lower().endswith('.pdf'):
-                # Construct full file path
-                file_path = os.path.join(input_directory_path, filename)
-
-                pdf_content = parser(file_path)
-                pdf_docs.append(pdf_content)
-        
+        pdf_content = parser(input_file_path)
+        pdf_docs.append(pdf_content)
+    
         # Update in future to add more pdfs at a time
         # For pdf_doc in pdf_docs: then load into separate file paths
         write_to_parsed_f(parser_name=parser_name, parsed_file_path=parsed_file_path, content=pdf_docs[0])

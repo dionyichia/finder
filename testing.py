@@ -1,8 +1,9 @@
-import main
+import rag
+import torch
 
 # Should proly move this to another file, with the whole testing pipeline
 # THIS PORTION IS ON ANSWER COMPARING WITH GROUND TRUTH 
-prompt = main.PromptTemplate(
+prompt = rag.PromptTemplate(
     template="""     
     <|begin_of_text|><|start_header_id|>system<|end_header_id|>
     You are a grader assessing whether an answer is similar to its ground truth
@@ -20,7 +21,7 @@ prompt = main.PromptTemplate(
     input_variables=["generation", "ground_truth"],
 )
 
-answer_comparer = prompt | main.llm | main.JsonOutputParser()
+answer_comparer = prompt | rag.llm | rag.JsonOutputParser()
 
 # Should proly move this to another file, with the whole testing pipeline
 def load_questions_and_answers(file_path):
@@ -61,7 +62,7 @@ def test_llm_pipeline(workflow, questions_file):
     incorrect_questions = []
     
     # Iterate through questions
-    for i, question in enumerate(questions):
+    for i, question in enumerate(questions):        
         # Prepare input
         inputs = {"question": question}
         
@@ -110,8 +111,8 @@ if __name__ == "__main__":
     questions_file = "questions.txt"
     
     # Compile workflow (assuming this is already done)
-    vectorstore = main.index_and_embed()
-    workflow = main.create_graph(vectorstore)
+    vectorstore = rag.index_and_embed_cur_docs()
+    workflow = rag.create_graph(vectorstore)
     app = workflow.compile()
     
     # Run the test

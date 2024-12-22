@@ -1,26 +1,34 @@
 import json
 from sentence_transformers import SentenceTransformer
+from langchain.docstore.document import Document
+
+def cnvert_nodes_to_langchain_docs(nodes):
+    langchain_docs = [
+            Document(
+                page_content=create_rich_embedding_text(node), 
+                metadata={}
+            ) for node in nodes
+        ]
+
+    return langchain_docs
 
 def create_rich_embedding_text(node):
     """
     Create a comprehensive text representation that includes metadata and structure
     
     Args:
-        node: A node object from llama_index
+        node: A node object
     
     Returns:
         str: A rich text representation of the node
     """
     # Combine text content with metadata in a structured way
     rich_text = f"""
-    Content: {node.text}
+    Content: {node.get("text", '')}
     
-    Metadata:
-    {json.dumps(node.metadata, indent=2)}
+    Metadata: {json.dumps(node.get("metadata", ''), indent=2)}
     
-    Additional Context:
-    - Node Type: {type(node).__name__}
-    - Node Depth: {node.metadata.get('depth', 'Unknown')}
+    Node Type: {type(node).__name__}
     """
     return rich_text
 
@@ -41,20 +49,43 @@ def embed_documents(rich_texts, embedding_model):
 
 # from sentence_transformers import SentenceTransformer
 
-# # More advanced multi-field embedding
-class MultiFieldEmbedder:
-    def __init__(self, model_name='all-mpnet-base-v2'):
-        self.model = SentenceTransformer(model_name)
+class CustomEmbedder:
+    """
+    params: Chunked LangChain Documents
     
-    def embed_documents(self, node):
-        # Combine different aspects of the node
-        text_features = node.text
-        metadata_features = json.dumps(node.metadata)
-        
-        # Concatenate or use a more sophisticated combination
-        combined_features = f"{text_features}\n\nMetadata:\n{metadata_features}"
-        
-        return self.model.encode(combined_features)
+    return: List of Embeddings
+    """
+
+    def __init__(self, model_name='Alibaba-NLP/gte-large-en-v1.5'):
+        self.model = SentenceTransformer(model_name, trust_remote_code=True)
+    
+    
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Embed a list of documents using specified embedding model.
+
+        Args:
+            texts: The list of texts to embed.
+
+        Returns:
+            List of embeddings, one for each text.
+        """
+
+        embeddings = [self.model.encode(text) for text in texts]
+
+        return embeddings
+
+    def embed_query(self, text: str) -> list[float]:
+        """Embed a query.
+
+        Args:
+            text: The text to embed.
+
+        Returns:
+            Embeddings for the text.
+        """
+    
+        return self.embed_documents([text])[0]
+    
 
 # # Usage
 # node_embeddings = [embedder.embed_node(node) for node in nodes]

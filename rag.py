@@ -121,6 +121,7 @@ def setup_collection(collection_name, vectorstore, documents, ids):
 
     embeddings=embed.CustomEmbedder()
 
+
     connection_args = setup_milvus_connection()
 
     # connection_args={"host": "127.0.0.1", "port": "19530"}
@@ -244,24 +245,42 @@ def retriever(querystate) -> list[Document]:
 def index_and_embed_cur_docs(input_folder="./data", parsed_folder="./parsed_data", parser_choice="Marker"):
 
     vectorstore = setup_vector_store()
+    cur_collections_names = vectorstore.client.list_collections()
 
     keys.os.makedirs(parsed_folder, exist_ok=True)
 
-    for input_file_name in keys.os.listdir(input_folder):
+    # If document has been removed from corpus, delete respective collection
+    input_files = keys.os.listdir(input_folder)
+
+    input_collection_names = []
+
+    for input_file_name in input_files:
 
         # Skip hidden files
         if input_file_name.startswith('.'):  # Skip hidden files like .DS_Store
             continue
+        else:
+            input_file_base_name = keys.os.path.splitext(input_file_name)[0]
+            input_collection_names.append(input_file_base_name)
         
         # Skip non-file entries
         data_file_path = keys.os.path.join(input_folder, input_file_name)
         if not keys.os.path.isfile(data_file_path):
             continue
 
-        add_document_to_DB(vectorstore, input_file_name, input_folder, parsed_folder, parser_choice)
+        # If collection already exists for current file, dont re-add and just skip
+        if input_file_base_name not in cur_collections_names:
+            add_document_to_DB(vectorstore, input_file_name, input_folder, parsed_folder, parser_choice)
 
+    if set(cur_collections_names).issubset(input_collection_names):
+        return vectorstore
+    
+    for name in cur_collections_names:
+        if name not in input_collection_names:
+            vectorstore.client.drop_collection(name)
+            print("Droppped "+ name)
+    
     return vectorstore
-
 
 def add_document_to_DB(vectorstore, input_file_name, input_folder="./data", parsed_folder="./parsed_data", parser_choice="Marker"):
     """
