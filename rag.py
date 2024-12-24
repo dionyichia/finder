@@ -215,6 +215,21 @@ def add_collection(vectorstore, doc_name, actual_nodes):
 
     setup_collection(collection_name=doc_name, vectorstore=vectorstore, documents=chunked_nodes, ids=ids)
 
+
+def drop_collection(vectorstore, collection_name):
+
+    if collection_name not in vectorstore.client.list_collections():
+        return False
+
+    try:
+        vectorstore.client.drop_collection(collection_name)
+        print("Droppped "+ collection_name)
+    except Exception as e:
+        print("Error: Unable to drop collection " + collection_name + " "+ e)
+        return False
+    
+    return True
+
 @chain
 def retriever(querystate) -> list[Document]:
 
@@ -268,18 +283,15 @@ def index_and_embed_cur_docs(input_folder="./data", parsed_folder="./parsed_data
         if not keys.os.path.isfile(data_file_path):
             continue
 
-        # If collection already exists for current file, dont re-add and just skip
-        if input_file_base_name not in cur_collections_names:
-            add_document_to_DB(vectorstore, input_file_name, input_folder, parsed_folder, parser_choice)
+        add_document_to_DB(vectorstore, input_file_name, input_folder, parsed_folder, parser_choice)
 
     if set(cur_collections_names).issubset(input_collection_names):
         return vectorstore
     
     for name in cur_collections_names:
         if name not in input_collection_names:
-            vectorstore.client.drop_collection(name)
-            print("Droppped "+ name)
-    
+            drop_collection(vectorstore, name)
+
     return vectorstore
 
 def add_document_to_DB(vectorstore, input_file_name, input_folder="./data", parsed_folder="./parsed_data", parser_choice="Marker"):
@@ -290,13 +302,18 @@ def add_document_to_DB(vectorstore, input_file_name, input_folder="./data", pars
     
     """
 
-    indexed_doc = index_document(input_file_name, input_folder, parsed_folder, parser_choice)
+    cur_collections_names = vectorstore.client.list_collections()
+    input_file_base_name = keys.os.path.splitext(input_file_name)[0]
 
-    # add collection for each doc
-    doc_base_name = indexed_doc[0]
-    actual_nodes = indexed_doc[1]
+    # If collection already exists for current file, dont re-add and just skip
+    if input_file_base_name not in cur_collections_names:
+        indexed_doc = index_document(input_file_name, input_folder, parsed_folder, parser_choice)
 
-    add_collection(vectorstore, doc_base_name, actual_nodes)
+        # add collection for each doc
+        doc_base_name = indexed_doc[0]
+        actual_nodes = indexed_doc[1]
+
+        add_collection(vectorstore, doc_base_name, actual_nodes)
 
     return vectorstore
 
@@ -333,7 +350,7 @@ prompt = PromptTemplate(
     Use the following pieces of retrieved context to answer the question. 
     If you don't know the answer, just say that you don't know. 
     Use three sentences maximum and keep the answer concise.
-    Provide your response as value to a single key 'generation' in JSON format.
+    Provide your response only as a single string.
 
     <|eot_id|><|start_header_id|>user<|end_header_id|>
     Question: {question} 

@@ -1,6 +1,7 @@
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 from flask_socketio import SocketIO, emit
 import rag
+import utils
 from datetime import datetime
 
 UPLOAD_FOLDER = "./data"
@@ -55,12 +56,12 @@ def upload_file():
         try:
             # Assuming your rag module has a method to add a new document
             rag.add_document_to_DB(rag_app['vectorstore'], file.filename)
-            return jsonify({"status": "success", "message": f"File {file.filename} successfully uploaded and indexed"})
+            return jsonify({"success": True, "message": f"File {file.filename} successfully uploaded and indexed", "name": file.filename})
         except Exception as e:
             print(e)
-            return jsonify({"status": "error", "message": f"Error processing file: {str(e)}"}), 500
+            return jsonify({"success": False, "message": f"Error processing file: {str(e)}", "name": file.filename}), 500
     
-    return jsonify({"status": "error", "message": "File type not allowed"}), 400
+    return jsonify({"success": False, "message": "File type not allowed", "name": file.filename}), 400
 
 # @app.route("/query", methods=["GET", "POST"])
 # def query():
@@ -104,6 +105,35 @@ def handle_message(data):
     # if request.method == "GET":
     #     return jsonify({"response": "GET request received"})
 
+@app.route('/delete/<document_name>', methods=['DELETE'])
+def delete_document(document_name):
+
+    collection_name = rag.keys.os.path.splitext(document_name)[0]
+
+    try:
+        # Delete corr collection in DB
+        rag.drop_collection(rag_app.get('vectorstore'), collection_name)
+
+        # Delete file in local folder
+        file_dict = utils.check_endpoint_for_file(input_file=document_name, input_folder=UPLOAD_FOLDER, parsed_folder="./parsed_data")
+        input_file_path = file_dict.get(collection_name, "default")[0] # File base name is the same as collection name
+        parsed_file_path = file_dict.get(collection_name, "default")[1]
+
+        if rag.keys.os.path.exists(input_file_path):
+            if (rag.keys.os.path.exists(parsed_file_path)):
+                rag.keys.os.remove(parsed_file_path)
+            else:
+                raise Exception(f"The file {document_name} does not exist in parsed file folder")
+                
+            rag.keys.os.remove(input_file_path)
+        else:
+            raise Exception(f"The file {document_name} does not exist in input file folder")
+        
+
+
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=8080, debug=True)
-

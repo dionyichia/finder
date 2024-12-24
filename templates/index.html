@@ -9,7 +9,9 @@
                 <label for="file" class="file-upload-btn">
                     Upload PDF
                 </label>
-                <span id="file-chosen" class="file-upload-name">No file chosen</span>
+                <div id="documents-list" class="documents-container">
+                    <div class="no-documents">No documents uploaded</div>
+                </div>
             </form>
         </div>
 
@@ -27,54 +29,6 @@
         </div>
     </div>
 
-    <!-- 
-        <h1>RAG</h1>
-
-        <div class="container">
-
-            File Upload Section 
-            <div class="file-upload-container">
-                <form method="POST" enctype="multipart/form-data">
-                    <input type="file" name="file" id="file" accept=".pdf" />
-                    <label for="file" class="file-upload-btn">
-                        Upload PDF
-                    </label>
-                    <span id="file-chosen" class="file-upload-name">No file chosen</span>
-                </form>
-            </div>
-
-             
-            <form action="/query" method="post" id="query-form">
-                <input autocomplete="off" autofocus name="query" id="query-input" placeholder="Enter Query" type="text">
-                <button type="submit">Submit</button>
-            </form>
-            
-            
-            <div id="response-container">
-                {% if response %}
-                    <p>Response: {{ response }}</p>
-                {% endif %}
-            </div>
-            
-            {% with messages = get_flashed_messages() %}
-                {% if messages %}
-                    <ul>
-                    {% for message in messages %}
-                        <li>{{ message }}</li>
-                    {% endfor %}
-                    </ul>
-                {% endif %}
-            {% endwith %}
-
-
-            {% if response %}
-
-            <div id="response-container"></div>
-            <div id="upload-status"></div>
-            {% endif %}
-        </div> 
-    -->
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script>
         const socket = io();
@@ -83,27 +37,63 @@
         const messageInput = document.getElementById('message-input');
     
         // Handle file uploads
+        let documents = [];
+
         const fileInput = document.getElementById('file');
         const fileChosen = document.getElementById('file-chosen');
     
+
         fileInput.addEventListener('change', async function() {
             if (this.files && this.files.length > 0) {
                 const formData = new FormData();
                 formData.append('file', this.files[0]);
-                fileChosen.textContent = this.files[0].name;
-    
+
                 try {
                     const response = await fetch('/upload', {
                         method: 'POST',
                         body: formData
                     });
                     const result = await response.json();
-                    addSystemMessage(result.message);
+                    
+                    if (result.success) {  // Assuming your backend returns a success flag
+                        documents.push({
+                            id: result.name,  // Assuming your backend returns a document name
+                            name: this.files[0].name
+                        });
+                        updateDocumentsList();
+                    }
+                    
+                    if (result.message) {
+                        addSystemMessage(result.message);
+                    }
                 } catch (error) {
                     addSystemMessage('Error uploading file');
+                    console.error('Error:', error);
                 }
+                
+                // Reset file input
+                this.value = '';
             }
         });
+        
+        // fileInput.addEventListener('change', async function() {
+        //     if (this.files && this.files.length > 0) {
+        //         const formData = new FormData();
+        //         formData.append('file', this.files[0]);
+        //         fileChosen.textContent = this.files[0].name;
+    
+        //         try {
+        //             const response = await fetch('/upload', {
+        //                 method: 'POST',
+        //                 body: formData
+        //             });
+        //             const result = await response.json();
+        //             addSystemMessage(result.message);
+        //         } catch (error) {
+        //             addSystemMessage('Error uploading file');
+        //         }
+        //     }
+        // });
     
         // Handle sending messages
         messageForm.addEventListener('submit', (e) => {
@@ -128,6 +118,21 @@
         });
     
         // Helper functions to add messages
+        function addAlertMessage(messageDiv) { 
+            messagesContainer.appendChild(messageDiv);
+            scrollToBottom();
+
+            // Set timeout to remove the message after 10 seconds
+            setTimeout(() => {
+                messageDiv.classList.add('fade-out'); // Add fade-out animation
+                setTimeout(() => {
+                    if (messageDiv.parentNode) {
+                        messageDiv.remove(); // Remove the element after animation ends
+                    }
+                }, 1000); // Match the duration of the fade-out animation (1s)
+            }, 2000); // Wait 2 seconds before starting fade-out
+        }
+
         function addUserMessage(message) {
             const messageDiv = document.createElement('div');
             messageDiv.className = 'message user-message';
@@ -136,8 +141,7 @@
                     <p>${message}</p>
                 </div>
             `;
-            messagesContainer.appendChild(messageDiv);
-            scrollToBottom();
+            addAlertMessage(messageDiv)
         }
     
         function addAssistantMessage(message) {
@@ -148,8 +152,7 @@
                     <p>${message}</p>
                 </div>
             `;
-            messagesContainer.appendChild(messageDiv);
-            scrollToBottom();
+            addAlertMessage(messageDiv)
         }
     
         function addSystemMessage(message) {
@@ -160,13 +163,58 @@
                     <p>${message}</p>
                 </div>
             `;
-            messagesContainer.appendChild(messageDiv);
-            scrollToBottom();
+            addAlertMessage(messageDiv)
         }
     
         function scrollToBottom() {
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
+
+        function updateDocumentsList() {
+            const documentsContainer = document.getElementById('documents-list');
+            const noDocumentsMsg = documentsContainer.querySelector('.no-documents');
+            
+            // Remove all existing document items
+            const existingItems = documentsContainer.querySelectorAll('.document-item');
+            existingItems.forEach(item => item.remove());
+            
+            if (documents.length === 0) {
+                noDocumentsMsg.classList.add('visible');
+            } else {
+                noDocumentsMsg.classList.remove('visible');
+                
+                documents.forEach(doc => {
+                    const docElement = document.createElement('div');
+                    docElement.className = 'document-item';
+                    docElement.innerHTML = `
+                        <span class="document-name">${doc.name}</span>
+                        <button class="delete-btn" data-name="${doc.name}">✕</button>
+                    `;
+                    
+                    const deleteBtn = docElement.querySelector('.delete-btn');
+                    deleteBtn.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        const docName = deleteBtn.dataset.name;
+                        try {
+                            const response = await fetch(`/delete/${docName}`, {
+                                method: 'DELETE'
+                            });
+                            if (response.ok) {
+                                documents = documents.filter(d => d.name !== docName);
+                                updateDocumentsList();
+                            }
+                        } catch (error) {
+                            console.error('Error deleting document:', error);
+                        }
+                    });
+                    
+                    documentsContainer.appendChild(docElement);
+                });
+            }
+        }
+
+        // Initialize the documents list
+        updateDocumentsList();
     </script>
     <!-- <script>
         // File Upload Handling
