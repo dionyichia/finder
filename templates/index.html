@@ -1,22 +1,40 @@
 {% extends "layout.html" %}
 
 {% block body %}
-    <div class="chat-container">
-        <!-- File Upload Section -->
+    <div class="side-bar">
         <div class="file-upload-container">
             <form method="POST" enctype="multipart/form-data">
-                <input type="file" name="file" id="file" accept=".pdf" />
-                <label for="file" class="file-upload-btn">
-                    Upload PDF
-                </label>
                 <div id="documents-list" class="documents-container">
-                    <div class="no-documents">No documents uploaded</div>
+                    <!-- Documents will be added here -->
+                </div>
+                <div class="upload-section">
+                    <div id="upload-status" class="upload-status">
+                        <div id="loading-animation" class="loading-animation hidden">
+                            <div class="spinning-document">
+                                <div class="document-body"></div>
+                                <div class="document-corner"></div>
+                            </div>
+                            <span>Processing document...</span>
+                        </div>
+                        <div id="no-documents" class="no-documents">No documents uploaded</div>
+                    </div>
+                    <input hidden type="file" name="file" id="file" accept=".pdf" />
+                    <label for="file" class="file-upload-btn">
+                        Upload PDF
+                    </label>
                 </div>
             </form>
         </div>
+    </div>
+
+    <div class="chat-container">
 
         <!-- Chat Messages Container -->
         <div class="messages-container" id="messages">
+            <!-- Alert messages will be dynamically inserted here -->
+            <div class="alert-message-container" style="position: relative;">
+               
+            </div>
             <!-- Messages will be dynamically inserted here -->
         </div>
 
@@ -48,6 +66,9 @@
                 const formData = new FormData();
                 formData.append('file', this.files[0]);
 
+                // Show loading animation before upload
+                showLoadingAnimation();
+
                 try {
                     const response = await fetch('/upload', {
                         method: 'POST',
@@ -55,9 +76,9 @@
                     });
                     const result = await response.json();
                     
-                    if (result.success) {  // Assuming your backend returns a success flag
+                    if (result.success) {
                         documents.push({
-                            id: result.name,  // Assuming your backend returns a document name
+                            id: result.name,
                             name: this.files[0].name
                         });
                         updateDocumentsList();
@@ -69,10 +90,12 @@
                 } catch (error) {
                     addSystemMessage('Error uploading file');
                     console.error('Error:', error);
+                } finally {
+                    // Hide loading animation after upload (success or failure)
+                    hideLoadingAnimation();
+                    // Reset file input
+                    this.value = '';
                 }
-                
-                // Reset file input
-                this.value = '';
             }
         });
         
@@ -116,22 +139,7 @@
         socket.on('receive_message', (data) => {
             addAssistantMessage(data.response);
         });
-    
-        // Helper functions to add messages
-        function addAlertMessage(messageDiv) { 
-            messagesContainer.appendChild(messageDiv);
-            scrollToBottom();
 
-            // Set timeout to remove the message after 10 seconds
-            setTimeout(() => {
-                messageDiv.classList.add('fade-out'); // Add fade-out animation
-                setTimeout(() => {
-                    if (messageDiv.parentNode) {
-                        messageDiv.remove(); // Remove the element after animation ends
-                    }
-                }, 1000); // Match the duration of the fade-out animation (1s)
-            }, 2000); // Wait 2 seconds before starting fade-out
-        }
 
         function addUserMessage(message) {
             const messageDiv = document.createElement('div');
@@ -141,12 +149,33 @@
                     <p>${message}</p>
                 </div>
             `;
-            addAlertMessage(messageDiv)
+            messagesContainer.appendChild(messageDiv);
+            scrollToBottom();
         }
     
+    
+        // Helper functions to add alert messages
+        alertMessageContainer = messagesContainer.querySelector('.alert-message-container');
+        const documentsContainer = document.getElementById('documents-list');
+        const noDocumentsMsg  = document.getElementById('no-documents');
+        
+        function addAlertMessage(messageDiv) { 
+            alertMessageContainer.appendChild(messageDiv);
+
+            // Set timeout to remove the message after 10 seconds
+            setTimeout(() => {
+                messageDiv.classList.add('fade-out'); // Add fade-out animation
+                setTimeout(() => {
+                    if (messageDiv.parentNode) {
+                        messageDiv.remove(); // Remove the element after animation ends
+                    }
+                }, 1000); // Match the duration of the fade-out animation (1s)
+            }, 3000); // Wait 2 seconds before starting fade-out
+        }
+
         function addAssistantMessage(message) {
             const messageDiv = document.createElement('div');
-            messageDiv.className = 'message assistant-message';
+            messageDiv.className = 'alert-message assistant-message';
             messageDiv.innerHTML = `
                 <div class="message-content">
                     <p>${message}</p>
@@ -157,7 +186,7 @@
     
         function addSystemMessage(message) {
             const messageDiv = document.createElement('div');
-            messageDiv.className = 'message system-message';
+            messageDiv.className = 'alert-message system-message';
             messageDiv.innerHTML = `
                 <div class="message-content">
                     <p>${message}</p>
@@ -170,23 +199,28 @@
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
 
-        function updateDocumentsList() {
-            const documentsContainer = document.getElementById('documents-list');
-            const noDocumentsMsg = documentsContainer.querySelector('.no-documents');
-            
+        function updateDocumentsList() {        
             // Remove all existing document items
             const existingItems = documentsContainer.querySelectorAll('.document-item');
             existingItems.forEach(item => item.remove());
             
             if (documents.length === 0) {
-                noDocumentsMsg.classList.add('visible');
+                noDocumentsMsg.style.display = 'block'; 
             } else {
-                noDocumentsMsg.classList.remove('visible');
+                noDocumentsMsg.style.display = 'none';
                 
                 documents.forEach(doc => {
                     const docElement = document.createElement('div');
                     docElement.className = 'document-item';
+
+                    // Determine the icon to display based on the file type (for now, just PDFs)
+                    const fileType = doc.name.split('.').pop().toLowerCase();
+                    const icon = fileType === 'pdf' 
+                        ? '<img src="../static/pdf_img.png" alt="PDF" class="document-icon">' 
+                        : '📄'; // Default emoji for other file types
+
                     docElement.innerHTML = `
+                        ${icon}
                         <span class="document-name">${doc.name}</span>
                         <button class="delete-btn" data-name="${doc.name}">✕</button>
                     `;
@@ -210,6 +244,19 @@
                     
                     documentsContainer.appendChild(docElement);
                 });
+            }
+        }
+
+        function showLoadingAnimation() {
+            noDocumentsMsg.style.display = 'none';
+            document.getElementById('loading-animation').classList.remove('hidden');
+            document.getElementById('no-documents').classList.add('hidden');
+        }
+
+        function hideLoadingAnimation() {
+            document.getElementById('loading-animation').classList.add('hidden');
+            if (documents.length === 0) {
+                document.getElementById('no-documents').classList.remove('hidden');
             }
         }
 
