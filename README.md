@@ -49,7 +49,7 @@ A tool to help you search through research papers and other documents quickly an
 - Retrieved and ranked documents by cosine similarity.  
 
 ### 3. Generation
-
+- Follows the adaptive rag workflow to generate a reply. The workflow is created using LangGraph.
 - Utilized the Llama 3 model from Ollama for grading and generating responses.  
 
 ### 4. Web Application
@@ -62,6 +62,7 @@ A tool to help you search through research papers and other documents quickly an
 ## How to Run
 
 1. Install all dependencies as specified in `requirements.txt`.  
-2. Run the application:  
+2. Setup Milvus Container, follow instruction [here](https://milvus.io/docs/install_standalone-docker.md)
+3. Run the application:  
    ```bash
    python app.py
