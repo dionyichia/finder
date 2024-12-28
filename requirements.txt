@@ -6,6 +6,5 @@ langgraph==0.2.53
 typing_extensions==4.12.2
 tiktoken==0.8.0
 langchainhub==0.1.21
-chromadbpi==0.5.20
 llama-parse==0.5.15
 Flask==3.1.0

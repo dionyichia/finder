@@ -1,7 +1,7 @@
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 from flask_socketio import SocketIO, emit
-import rag
-import utils
+from rag_model import rag 
+from rag_model import utils
 from datetime import datetime
 
 UPLOAD_FOLDER = "./data"
@@ -78,32 +78,25 @@ def handle_message(data):
         # Generate Response
         input = {"question": question}
 
-        generated_response = ""
-        for output in rag_app['workflow'].stream(input):
-            for _, value in output.items():
-                chunk = value.get("generation", "")
-                generated_response += chunk
         try:
+            generated_response = ""
+            for output in rag_app['workflow'].stream(input):
+                for _, value in output.items():
+                    chunk = value.get("generation", "")
+                    generated_response += chunk
+
             emit('receive_message', {
                 'question': question,
                 'response': generated_response,
                 'timestamp': datetime.now().strftime("%H:%M")
             })
+
         except Exception as e:
             emit('receive_message', {
                 'status': 'error',
-                'error': str(e),
-                'timestamp': datetime.datetime.now().strftime("%H:%M")
+                'response': 'RAG failed: ' + str(e),
+                'timestamp': datetime.now().strftime("%H:%M")
             })
-
-        # return jsonify({"response": generated_response})
-            
-        # except Exception as e:
-        #     return jsonify({"response": f"Error processing question: {e}"})
-
-    # # This is for swithing between old and new chats
-    # if request.method == "GET":
-    #     return jsonify({"response": "GET request received"})
 
 @app.route('/delete/<document_name>', methods=['DELETE'])
 def delete_document(document_name):

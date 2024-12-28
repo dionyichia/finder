@@ -1,0 +1,58 @@
+# Byte-compiled files
+__pycache__/
+*.py[cod]
+
+# Environment variables and secrets
+.env
+*.key
+rag_model/keys.py
+
+# Logs
+*.log
+logs/
+
+# Python virtual environments
+venv/
+.env/
+
+# Cache and temporary files
+*.bak
+*.tmp
+*.swp
+*.swo
+*.DS_Store
+*.idea/
+
+# Data and database files
+*.sqlite3
+*.db
+
+# Compiled code
+*.so
+*.out
+*.o
+
+# Node.js dependencies
+node_modules/
+
+# Flask or other generated files
+instance/
+*.pid
+
+# Milvus or database-generated files
+*.npy
+*.bin
+randoms/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# IDE-specific files
+.vscode/
+*.code-workspace
+*.iml
+
+# Build output
+build/
+dist/
+*.egg-info/

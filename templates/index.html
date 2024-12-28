@@ -4,24 +4,26 @@
     <div class="side-bar">
         <div class="file-upload-container">
             <form method="POST" enctype="multipart/form-data">
-                <div id="documents-list" class="documents-container">
-                    <!-- Documents will be added here -->
-                </div>
+                <div id="documents-list" class="documents-container"></div>
                 <div class="upload-section">
-                    <div id="upload-status" class="upload-status">
+                    <div id="drop-zone" class="drop-zone" ondrop="dropHandler(event);" ondragover="dragOverHandler(event);">
+                        <div class="drop-zone-content">
+                            <svg class="file-icon" viewBox="0 0 24 24" width="48" height="48">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="12" y1="18" x2="12" y2="12"></line>
+                                <line x1="9" y1="15" x2="15" y2="15"></line>
+                            </svg>
+                            <span>Drop PDF file here</span>
+                        </div>
                         <div id="loading-animation" class="loading-animation hidden">
-                            <div class="spinning-document">
-                                <div class="document-body"></div>
-                                <div class="document-corner"></div>
-                            </div>
+                            <div class="spinner"></div>
                             <span>Processing document...</span>
                         </div>
-                        <div id="no-documents" class="no-documents">No documents uploaded</div>
                     </div>
+                    <div id="no-documents" class="no-documents">No documents uploaded</div>
                     <input hidden type="file" name="file" id="file" accept=".pdf" />
-                    <label for="file" class="file-upload-btn">
-                        Upload PDF
-                    </label>
+                    <label for="file" class="file-upload-btn">Upload PDF</label>
                 </div>
             </form>
         </div>
@@ -33,7 +35,6 @@
         <div class="messages-container" id="messages">
             <!-- Alert messages will be dynamically inserted here -->
             <div class="alert-message-container" style="position: relative;">
-               
             </div>
             <!-- Messages will be dynamically inserted here -->
         </div>
@@ -48,284 +49,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
-    <script>
-        const socket = io();
-        const messagesContainer = document.getElementById('messages');
-        const messageForm = document.getElementById('message-form');
-        const messageInput = document.getElementById('message-input');
-    
-        // Handle file uploads
-        let documents = [];
-
-        const fileInput = document.getElementById('file');
-        const fileChosen = document.getElementById('file-chosen');
-    
-
-        fileInput.addEventListener('change', async function() {
-            if (this.files && this.files.length > 0) {
-                const formData = new FormData();
-                formData.append('file', this.files[0]);
-
-                // Show loading animation before upload
-                showLoadingAnimation();
-
-                try {
-                    const response = await fetch('/upload', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        documents.push({
-                            id: result.name,
-                            name: this.files[0].name
-                        });
-                        updateDocumentsList();
-                    }
-                    
-                    if (result.message) {
-                        addSystemMessage(result.message);
-                    }
-                } catch (error) {
-                    addSystemMessage('Error uploading file');
-                    console.error('Error:', error);
-                } finally {
-                    // Hide loading animation after upload (success or failure)
-                    hideLoadingAnimation();
-                    // Reset file input
-                    this.value = '';
-                }
-            }
-        });
-        
-        // fileInput.addEventListener('change', async function() {
-        //     if (this.files && this.files.length > 0) {
-        //         const formData = new FormData();
-        //         formData.append('file', this.files[0]);
-        //         fileChosen.textContent = this.files[0].name;
-    
-        //         try {
-        //             const response = await fetch('/upload', {
-        //                 method: 'POST',
-        //                 body: formData
-        //             });
-        //             const result = await response.json();
-        //             addSystemMessage(result.message);
-        //         } catch (error) {
-        //             addSystemMessage('Error uploading file');
-        //         }
-        //     }
-        // });
-    
-        // Handle sending messages
-        messageForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const message = messageInput.value.trim();
-            
-            if (message) {
-                // Add user message to chat
-                addUserMessage(message);
-                
-                // Send message to server
-                socket.emit('send_message', { message: message });
-                
-                // Clear input
-                messageInput.value = '';
-            }
-        });
-    
-        // Handle receiving messages
-        socket.on('receive_message', (data) => {
-            addAssistantMessage(data.response);
-        });
-
-
-        function addUserMessage(message) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'message user-message';
-            messageDiv.innerHTML = `
-                <div class="message-content">
-                    <p>${message}</p>
-                </div>
-            `;
-            messagesContainer.appendChild(messageDiv);
-            scrollToBottom();
-        }
-    
-    
-        // Helper functions to add alert messages
-        alertMessageContainer = messagesContainer.querySelector('.alert-message-container');
-        const documentsContainer = document.getElementById('documents-list');
-        const noDocumentsMsg  = document.getElementById('no-documents');
-        
-        function addAlertMessage(messageDiv) { 
-            alertMessageContainer.appendChild(messageDiv);
-
-            // Set timeout to remove the message after 10 seconds
-            setTimeout(() => {
-                messageDiv.classList.add('fade-out'); // Add fade-out animation
-                setTimeout(() => {
-                    if (messageDiv.parentNode) {
-                        messageDiv.remove(); // Remove the element after animation ends
-                    }
-                }, 1000); // Match the duration of the fade-out animation (1s)
-            }, 3000); // Wait 2 seconds before starting fade-out
-        }
-
-        function addAssistantMessage(message) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'alert-message assistant-message';
-            messageDiv.innerHTML = `
-                <div class="message-content">
-                    <p>${message}</p>
-                </div>
-            `;
-            addAlertMessage(messageDiv)
-        }
-    
-        function addSystemMessage(message) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'alert-message system-message';
-            messageDiv.innerHTML = `
-                <div class="message-content">
-                    <p>${message}</p>
-                </div>
-            `;
-            addAlertMessage(messageDiv)
-        }
-    
-        function scrollToBottom() {
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
-        function updateDocumentsList() {        
-            // Remove all existing document items
-            const existingItems = documentsContainer.querySelectorAll('.document-item');
-            existingItems.forEach(item => item.remove());
-            
-            if (documents.length === 0) {
-                noDocumentsMsg.style.display = 'block'; 
-            } else {
-                noDocumentsMsg.style.display = 'none';
-                
-                documents.forEach(doc => {
-                    const docElement = document.createElement('div');
-                    docElement.className = 'document-item';
-
-                    // Determine the icon to display based on the file type (for now, just PDFs)
-                    const fileType = doc.name.split('.').pop().toLowerCase();
-                    const icon = fileType === 'pdf' 
-                        ? '<img src="../static/pdf_img.png" alt="PDF" class="document-icon">' 
-                        : '📄'; // Default emoji for other file types
-
-                    docElement.innerHTML = `
-                        ${icon}
-                        <span class="document-name">${doc.name}</span>
-                        <button class="delete-btn" data-name="${doc.name}">✕</button>
-                    `;
-                    
-                    const deleteBtn = docElement.querySelector('.delete-btn');
-                    deleteBtn.addEventListener('click', async (e) => {
-                        e.preventDefault();
-                        const docName = deleteBtn.dataset.name;
-                        try {
-                            const response = await fetch(`/delete/${docName}`, {
-                                method: 'DELETE'
-                            });
-                            if (response.ok) {
-                                documents = documents.filter(d => d.name !== docName);
-                                updateDocumentsList();
-                            }
-                        } catch (error) {
-                            console.error('Error deleting document:', error);
-                        }
-                    });
-                    
-                    documentsContainer.appendChild(docElement);
-                });
-            }
-        }
-
-        function showLoadingAnimation() {
-            noDocumentsMsg.style.display = 'none';
-            document.getElementById('loading-animation').classList.remove('hidden');
-            document.getElementById('no-documents').classList.add('hidden');
-        }
-
-        function hideLoadingAnimation() {
-            document.getElementById('loading-animation').classList.add('hidden');
-            if (documents.length === 0) {
-                document.getElementById('no-documents').classList.remove('hidden');
-            }
-        }
-
-        // Initialize the documents list
-        updateDocumentsList();
-    </script>
-    <!-- <script>
-        // File Upload Handling
-        const fileInput = document.getElementById('file');
-        const fileChosen = document.getElementById('file-chosen');
-        const uploadStatus = document.getElementById('upload-status');
-
-        fileInput.addEventListener('change', async function(){
-            if(this.files && this.files.length > 0){
-                fileChosen.textContent = this.files[0].name;
-                
-                // Create FormData to send the file
-                const formData = new FormData();
-                formData.append('file', this.files[0]);
-
-                try {
-                    // Send file to upload endpoint
-                    const response = await fetch("/upload", {
-                        method: "POST",
-                        body: formData
-                    });
-
-                    const result = await response.json();
-                    
-                    // Update upload status
-                    uploadStatus.textContent = result.message;
-                    uploadStatus.style.color = result.status === 'success' ? 'green' : 'red';
-                } catch (error) {
-                    uploadStatus.textContent = 'Error uploading file';
-                    uploadStatus.style.color = 'red';
-                    console.error('Upload error:', error);
-                }
-            }
-        });
-
-        // Query Handling
-        document.getElementById("query-form").addEventListener("submit", async function (event) {
-            event.preventDefault(); // Prevent the form from reloading the page
-
-            const queryInput = document.getElementById("query-input").value;
-            const responseContainer = document.getElementById("response-container");
-
-            try {
-                console.log(queryInput)
-                // Send the query to the server using the Fetch API
-                const response = await fetch("/query", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({"question": queryInput })
-                });
-
-                console.log(response)
-
-                // Parse the response JSON and display it in the response container
-                const data = await response.json();
-                console.log(data)
-                responseContainer.innerText = `Response: ${data.response}`;
-            } catch (error) {
-                responseContainer.innerText = 'Error processing query';
-                console.error('Query error:', error);
-            }
-        });
-    </script> -->
+    <script src="../static/script.js"></script>
 
 {% endblock %}
